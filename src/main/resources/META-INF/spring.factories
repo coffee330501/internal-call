@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+io.github.coffee330501.autoconfigure.InternalCallAutoConfigure
