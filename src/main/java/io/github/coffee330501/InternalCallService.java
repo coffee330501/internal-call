@@ -19,19 +19,17 @@ import org.apache.http.util.EntityUtils;
 import javax.annotation.Resource;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Map;
 
 public class InternalCallService {
     @Resource
     InternalCallConfig internalCallConfig;
 
 
-
-    public <T> T post(String url) throws InternalCallException {
-        return post(url, new HashMap<>());
+    public <T> T post(String url, Class<T> clazz) throws InternalCallException {
+        return post(url, clazz, new Object());
     }
 
-    public <T> T post(String url, Map<String, Object> params) throws InternalCallException {
+    public <T> T post(String url, Class<T> clazz, Object params) throws InternalCallException {
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
             // 签名
@@ -54,10 +52,11 @@ public class InternalCallService {
                 throw new InternalCallException(signatureResult.getMsg());
             }
             if (signatureResult.getCode() == 500) {
-                LogUtils.error(url, params, requestId);
+                LogUtils.error(url, params, requestId, signatureResult.getMsg());
                 throw new InternalCallException("系统异常");
             }
-            return signatureResult.getData();
+            T data = signatureResult.getData();
+            return JSONObject.parseObject(JSONObject.toJSONString(data), clazz);
         } catch (Exception e) {
             LogUtils.error(e, url, params);
             throw new InternalCallException("请求失败");

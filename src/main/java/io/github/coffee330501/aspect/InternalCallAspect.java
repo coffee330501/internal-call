@@ -14,6 +14,7 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -63,8 +64,10 @@ public class InternalCallAspect {
         }
         try {
             // 验签
-            if (!RSAUtils.verifySignByPublicKey(getSignContent(timestamp, requestId), sign, internalCallConfig.getPublicKey())) {
-                throw new InternalCallException("验签失败");
+            String publicKey = internalCallConfig.getPublicKey();
+            if (StringUtils.isEmpty(publicKey)) log.error("internal call publicKey is empty!");
+            if (!RSAUtils.verifySignByPublicKey(getSignContent(timestamp, requestId), sign, publicKey)) {
+                return onSignFailed("验签失败", requestId);
             }
             // 检查请求是否重复、过期
             requestValidate(timestamp, requestId);
