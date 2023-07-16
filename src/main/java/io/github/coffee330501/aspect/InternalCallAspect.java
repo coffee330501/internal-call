@@ -27,7 +27,7 @@ import java.util.Objects;
 @Aspect
 @Slf4j
 public class InternalCallAspect {
-    @Resource
+    @Resource(name = "interCallRedisUtil")
     RedisUtil redisUtil;
     @Resource
     InternalCallConfig internalCallConfig;

@@ -3,9 +3,11 @@ package io.github.coffee330501.utils;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 
+@Component("interCallRedisUtil")
 public class RedisUtil {
     @Resource
     private RedisTemplate<String, String> redisTemplate;
