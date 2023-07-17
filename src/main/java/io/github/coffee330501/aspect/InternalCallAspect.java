@@ -1,6 +1,7 @@
 package io.github.coffee330501.aspect;
 
 
+import cn.hutool.core.util.StrUtil;
 import io.github.coffee330501.annotation.Internal;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
@@ -57,17 +58,20 @@ public class InternalCallAspect {
                 .requireNonNull(RequestContextHolder.getRequestAttributes()))
                 .getRequest();
         String sign = request.getHeader("sign");
-        long timestamp = Long.parseLong(request.getHeader("timestamp"));
         String requestId = request.getHeader("requestId");
-        if (sign == null || requestId == null) {
-            return onSignFailed("签名参数为空", requestId);
+        String timestampStr = request.getHeader("timestamp");
+        if (sign == null || requestId == null || timestampStr == null) {
+            return SignatureUtil.errorByClient("签名参数为空");
         }
+
         try {
             // 验签
             String publicKey = internalCallConfig.getPublicKey();
             if (StringUtils.isEmpty(publicKey)) log.error("internal call publicKey is empty!");
+
+            long timestamp = Long.parseLong(timestampStr);
             if (!RSAUtils.verifySignByPublicKey(getSignContent(timestamp, requestId), sign, publicKey)) {
-                return onSignFailed("验签失败", requestId);
+                throw new InternalCallException("验签失败");
             }
             // 检查请求是否重复、过期
             requestValidate(timestamp, requestId);
