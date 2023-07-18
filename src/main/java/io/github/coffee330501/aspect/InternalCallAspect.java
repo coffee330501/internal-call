@@ -61,17 +61,17 @@ public class InternalCallAspect {
         String requestId = request.getHeader("requestId");
         String timestampStr = request.getHeader("timestamp");
         if (sign == null || requestId == null || timestampStr == null) {
-            return SignatureUtil.errorByClient("签名参数为空");
+            return SignatureUtil.errorByClient("Signature parameter is empty");
         }
 
         try {
             // 验签
             String publicKey = internalCallConfig.getPublicKey();
-            if (StringUtils.isEmpty(publicKey)) log.error("internal call publicKey is empty!");
+            if (StringUtils.isEmpty(publicKey)) log.error("Internal call publicKey is empty!");
 
             long timestamp = Long.parseLong(timestampStr);
             if (!RSAUtils.verifySignByPublicKey(getSignContent(timestamp, requestId), sign, publicKey)) {
-                throw new InternalCallException("验签失败");
+                throw new InternalCallException("Internal call verification failed");
             }
             // 检查请求是否重复、过期
             requestValidate(timestamp, requestId);
@@ -111,11 +111,11 @@ public class InternalCallAspect {
         long time = new Date().getTime();
         long diff = time - timestamp;
         if (diff > 10 * 1000) {
-            throw new InternalCallException("请求过期");
+            throw new InternalCallException("Request Expiration");
         }
         boolean set = redisUtil.setNx(requestId, 10);
         if (!set) {
-            throw new InternalCallException("重复请求");
+            throw new InternalCallException("Duplicate Request");
         }
     }
 }
