@@ -1,6 +1,7 @@
 package io.github.coffee330501;
 
 import cn.hutool.core.util.IdUtil;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
 import io.github.coffee330501.config.InternalCallConfig;
@@ -25,11 +26,11 @@ public class InternalCallService {
     InternalCallConfig internalCallConfig;
 
 
-    public <T> T post(String url, Class<T> clazz) throws InternalCallException {
+    public Object post(String url, Class clazz) throws InternalCallException {
         return post(url, clazz, new Object());
     }
 
-    public <T> T post(String url, Class<T> clazz, Object params) throws InternalCallException {
+    public Object post(String url, Class clazz, Object params) throws InternalCallException {
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
             // 签名
@@ -46,7 +47,7 @@ public class InternalCallService {
                 LogUtils.error(url, params, requestId, resultStr);
                 throw new InternalCallException("请求失败");
             }
-            SignatureResult<T> signatureResult = JSONObject.parseObject(resultStr, new TypeReference<SignatureResult<T>>() {
+            SignatureResult signatureResult = JSONObject.parseObject(resultStr, new TypeReference<SignatureResult>() {
             });
             if (signatureResult.getCode() == 400) {
                 throw new InternalCallException(signatureResult.getMsg());
@@ -55,7 +56,10 @@ public class InternalCallService {
                 LogUtils.error(url, params, requestId, signatureResult.getMsg());
                 throw new InternalCallException("系统异常");
             }
-            T data = signatureResult.getData();
+            Object data = signatureResult.getData();
+            if (data instanceof JSONArray) {
+                return JSONArray.parseArray(JSONObject.toJSONString(data), clazz);
+            }
             return JSONObject.parseObject(JSONObject.toJSONString(data), clazz);
         } catch (Exception e) {
             LogUtils.error(e, url, params);
