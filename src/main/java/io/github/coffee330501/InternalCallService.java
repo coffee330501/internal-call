@@ -19,18 +19,17 @@ import org.apache.http.util.EntityUtils;
 
 import javax.annotation.Resource;
 import java.util.Date;
-import java.util.HashMap;
 
 public class InternalCallService {
     @Resource
     InternalCallConfig internalCallConfig;
 
 
-    public Object post(String url, Class clazz) throws InternalCallException {
+    public Object post(String url, Class clazz) throws Exception {
         return post(url, clazz, new Object());
     }
 
-    public Object post(String url, Class clazz, Object params) throws InternalCallException {
+    public Object post(String url, Class clazz, Object params) throws Exception {
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
             // 签名
@@ -45,27 +44,44 @@ public class InternalCallService {
             String resultStr = EntityUtils.toString(response.getEntity());
             if (response.getStatusLine().getStatusCode() != 200) {
                 LogUtils.error(url, params, requestId, resultStr);
-                throw new InternalCallException("请求失败");
+                throw new InternalCallException(400,"请求失败");
             }
             SignatureResult signatureResult = JSONObject.parseObject(resultStr, new TypeReference<SignatureResult>() {
             });
-            if (signatureResult.getCode() == 400) {
-                throw new InternalCallException(signatureResult.getMsg());
-            }
-            if (signatureResult.getCode() == 500) {
-                LogUtils.error(url, params, requestId, signatureResult.getMsg());
-                throw new InternalCallException("系统异常");
-            }
+
+            // 处理异常
+            handleInternalCallException(signatureResult);
+
             Object data = signatureResult.getData();
+            if (data == null) return null;
+
             if (data instanceof JSONArray) {
                 return JSONArray.parseArray(JSONObject.toJSONString(data), clazz);
             }
             return JSONObject.parseObject(JSONObject.toJSONString(data), clazz);
-        } catch (Exception e) {
-            LogUtils.error(e, url, params);
-            throw new InternalCallException("请求失败");
         }
+    }
 
+    /**
+     * 处理异常返回
+     *
+     * @param signatureResult SignatureResult
+     * @throws Exception e
+     */
+    private void handleInternalCallException(SignatureResult signatureResult) throws Exception {
+        // 验签问题
+        if (signatureResult.getCode() == 400) {
+            throw new InternalCallException(400,signatureResult.getMsg());
+        }
+        // 业务异常
+        if (signatureResult.getCode() == 500) {
+            throw new InternalCallException(500, signatureResult.getMsg());
+        }
+        // 系统异常
+        if (signatureResult.getCode() == 501) {
+            LogUtils.error(signatureResult.getMsg());
+            throw new Exception(signatureResult.getMsg());
+        }
     }
 
 

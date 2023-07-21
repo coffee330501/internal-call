@@ -1,11 +1,10 @@
 package io.github.coffee330501.aspect;
 
 
-import cn.hutool.core.util.StrUtil;
+import io.github.coffee330501.annotation.BusinessExceptionTag;
 import io.github.coffee330501.annotation.Internal;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
-import io.github.coffee330501.utils.LogUtils;
 import io.github.coffee330501.utils.RSAUtils;
 import io.github.coffee330501.utils.RedisUtil;
 import io.github.coffee330501.utils.SignatureUtil;
@@ -71,7 +70,7 @@ public class InternalCallAspect {
 
             long timestamp = Long.parseLong(timestampStr);
             if (!RSAUtils.verifySignByPublicKey(getSignContent(timestamp, requestId), sign, publicKey)) {
-                throw new InternalCallException("Internal call verification failed");
+                throw new InternalCallException(400, "Internal call verification failed");
             }
             // 检查请求是否重复、过期
             requestValidate(timestamp, requestId);
@@ -80,9 +79,12 @@ public class InternalCallAspect {
             Object result = joinPoint.proceed(args);
             return SignatureUtil.success(result);
         } catch (InternalCallException e) {
-            return SignatureUtil.errorByClient(e.getMessage());
+            if (e.getCode() == 400) return SignatureUtil.errorByClient(e.getMessage());
+            return SignatureUtil.errorByBusiness(e.getMessage());
         } catch (Exception e) {
-            return onSignFailed(e.getMessage(), requestId);
+            BusinessExceptionTag annotation = e.getClass().getAnnotation(BusinessExceptionTag.class);
+            if (annotation == null) return SignatureUtil.errorBySystem(e.getMessage());
+            return SignatureUtil.errorByBusiness(e.getMessage());
         }
     }
 
@@ -93,11 +95,6 @@ public class InternalCallAspect {
      */
     private String getSignContent(Long timestamp, String requestId) {
         return "requestId=" + requestId + "&" + "timestamp=" + timestamp;
-    }
-
-    private Object onSignFailed(String msg, String requestId) {
-        LogUtils.error(msg, requestId);
-        return SignatureUtil.error(msg);
     }
 
     /**
@@ -111,11 +108,11 @@ public class InternalCallAspect {
         long time = new Date().getTime();
         long diff = time - timestamp;
         if (diff > 10 * 1000) {
-            throw new InternalCallException("Request Expiration");
+            throw new InternalCallException(400, "Request Expiration");
         }
         boolean set = redisUtil.setNx(requestId, 10);
         if (!set) {
-            throw new InternalCallException("Duplicate Request");
+            throw new InternalCallException(400, "Duplicate Request");
         }
     }
 }

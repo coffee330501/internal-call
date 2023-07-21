@@ -58,14 +58,27 @@ public class SignatureUtil {
     }
 
     /**
+     * 业务失败返回
+     *
+     * @param msg 失败信息
+     * @return SignatureOutput
+     */
+    public static SignatureResult<Object> errorByBusiness(String msg) {
+        SignatureResult<Object> signatureOutput = new SignatureResult<>();
+        signatureOutput.setCode(500);
+        signatureOutput.setMsg(msg);
+        return signatureOutput;
+    }
+
+    /**
      * 系统失败返回
      *
      * @param msg 失败信息
      * @return SignatureOutput
      */
-    public static SignatureResult<Object> error(String msg) {
+    public static SignatureResult<Object> errorBySystem(String msg) {
         SignatureResult<Object> signatureOutput = new SignatureResult<>();
-        signatureOutput.setCode(500);
+        signatureOutput.setCode(501);
         signatureOutput.setMsg(msg);
         return signatureOutput;
     }
