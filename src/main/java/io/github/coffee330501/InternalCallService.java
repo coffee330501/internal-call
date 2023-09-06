@@ -4,6 +4,8 @@ import cn.hutool.core.util.IdUtil;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
+import io.github.coffee330501.service.SenderIdHandler;
+import io.github.coffee330501.service.SenderIdSelector;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
 import io.github.coffee330501.utils.LogUtils;
@@ -23,6 +25,8 @@ import java.util.Date;
 public class InternalCallService {
     @Resource
     InternalCallConfig internalCallConfig;
+    @Resource
+    SenderIdSelector senderIdSelector;
 
 
     public Object post(String url, Class clazz) throws Exception {
@@ -30,6 +34,7 @@ public class InternalCallService {
     }
 
     public Object post(String url, Class clazz, Object params) throws Exception {
+        LogUtils.info(url, params);
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
             // 签名
@@ -44,7 +49,7 @@ public class InternalCallService {
             String resultStr = EntityUtils.toString(response.getEntity());
             if (response.getStatusLine().getStatusCode() != 200) {
                 LogUtils.error(url, params, requestId, resultStr);
-                throw new InternalCallException(400,"请求失败");
+                throw new InternalCallException(400, "请求失败");
             }
             SignatureResult signatureResult = JSONObject.parseObject(resultStr, new TypeReference<SignatureResult>() {
             });
@@ -71,7 +76,7 @@ public class InternalCallService {
     private void handleInternalCallException(SignatureResult signatureResult) throws Exception {
         // 验签问题
         if (signatureResult.getCode() == 400) {
-            throw new InternalCallException(400,signatureResult.getMsg());
+            throw new InternalCallException(400, signatureResult.getMsg());
         }
         // 业务异常
         if (signatureResult.getCode() == 500) {
@@ -98,10 +103,15 @@ public class InternalCallService {
         // 签名
         String content = "requestId=" + requestId + "&" + "timestamp=" + timestamp;
         String sign = RSAUtils.signByPrivateKey(content, internalCallConfig.getPrivateKey());
+        // 当前用户信息
+        String userId = senderIdSelector.getUserId();
+        String userTableName = senderIdSelector.getUserTableName();
 
         requestBase.addHeader("timestamp", String.valueOf(timestamp));
         requestBase.addHeader("requestId", requestId);
         requestBase.addHeader("sign", sign);
+        requestBase.addHeader("userId", userId);
+        requestBase.addHeader("userTableName", userTableName);
         return requestId;
     }
 }

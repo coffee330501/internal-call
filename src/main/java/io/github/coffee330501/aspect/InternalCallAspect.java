@@ -5,6 +5,7 @@ import io.github.coffee330501.annotation.BusinessExceptionTag;
 import io.github.coffee330501.annotation.Internal;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
+import io.github.coffee330501.service.SenderIdHandler;
 import io.github.coffee330501.utils.RSAUtils;
 import io.github.coffee330501.utils.RedisUtil;
 import io.github.coffee330501.utils.SignatureUtil;
@@ -29,6 +30,8 @@ import java.util.Objects;
 public class InternalCallAspect {
     @Resource(name = "interCallRedisUtil")
     RedisUtil redisUtil;
+    @Resource
+    SenderIdHandler senderIdHandler;
     @Resource
     InternalCallConfig internalCallConfig;
 
@@ -62,6 +65,10 @@ public class InternalCallAspect {
         if (sign == null || requestId == null || timestampStr == null) {
             return SignatureUtil.errorByClient("Signature parameter is empty");
         }
+
+        String userId = request.getHeader("userId");
+        String userTableName = request.getHeader("userTableName");
+        senderIdHandler.handle(userId, userTableName);
 
         try {
             // 验签
