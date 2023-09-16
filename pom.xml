@@ -6,7 +6,7 @@
 
     <groupId>io.github.coffee330501</groupId>
     <artifactId>internal-call</artifactId>
-    <version>1.0.7</version>
+    <version>1.0.8</version>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
@@ -83,8 +83,8 @@
 
         <dependency>
             <groupId>cn.hutool</groupId>
-            <artifactId>hutool-core</artifactId>
-            <version>5.8.20</version>
+            <artifactId>hutool-all</artifactId>
+            <version>5.8.5</version>
         </dependency>
 
         <dependency>

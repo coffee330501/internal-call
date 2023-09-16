@@ -4,12 +4,12 @@ import cn.hutool.core.util.IdUtil;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
-import io.github.coffee330501.service.SenderIdHandler;
-import io.github.coffee330501.service.SenderIdSelector;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
-import io.github.coffee330501.utils.LogUtils;
+import io.github.coffee330501.service.InternalCallLogHandler;
+import io.github.coffee330501.service.SenderIdSelector;
 import io.github.coffee330501.utils.RSAUtils;
+import io.github.coffee330501.utils.SpringContextUtil;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpPost;
@@ -19,14 +19,21 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.util.Date;
 
 public class InternalCallService {
     @Resource
     InternalCallConfig internalCallConfig;
-    @Resource
     SenderIdSelector senderIdSelector;
+    InternalCallLogHandler internalCallLogHandler;
+
+    @PostConstruct
+    public void init() {
+        senderIdSelector = SpringContextUtil.getBean(SenderIdSelector.class);
+        internalCallLogHandler = SpringContextUtil.getBean(InternalCallLogHandler.class);
+    }
 
 
     public Object post(String url, Class clazz) throws Exception {
@@ -34,11 +41,13 @@ public class InternalCallService {
     }
 
     public Object post(String url, Class clazz, Object params) throws Exception {
-        LogUtils.info(url, params);
+        InternalCallLogHandler.LogBuilder logBuilder = InternalCallLogHandler.createLogBuilder();
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
             // 签名
             String requestId = this.sign(requestBase);
+            // 记录日志
+            log(logBuilder, url, params, requestId);
             // 参数
             String paramStr = JSONObject.toJSONString(params);
             StringEntity stringEntity = new StringEntity(paramStr, ContentType.APPLICATION_JSON);
@@ -48,22 +57,35 @@ public class InternalCallService {
             // 处理结果
             String resultStr = EntityUtils.toString(response.getEntity());
             if (response.getStatusLine().getStatusCode() != 200) {
-                LogUtils.error(url, params, requestId, resultStr);
                 throw new InternalCallException(400, "请求失败");
             }
             SignatureResult signatureResult = JSONObject.parseObject(resultStr, new TypeReference<SignatureResult>() {
             });
 
             // 处理异常
+            logBuilder.add("code", signatureResult.getCode());
+            logBuilder.add("msg", signatureResult.getMsg());
             handleInternalCallException(signatureResult);
 
             Object data = signatureResult.getData();
+            logBuilder.add("data", data);
             if (data == null) return null;
 
             if (data instanceof JSONArray) {
                 return JSONArray.parseArray(JSONObject.toJSONString(data), clazz);
             }
             return JSONObject.parseObject(JSONObject.toJSONString(data), clazz);
+        } finally {
+            if (internalCallLogHandler != null) internalCallLogHandler.log(logBuilder);
+        }
+    }
+
+    private void log(InternalCallLogHandler.LogBuilder logBuilder, String url, Object params, String requestId) {
+        logBuilder.add("url", url).add("params", params).add("requestId", requestId).add("type", "send");
+        if (senderIdSelector != null) {
+            String userId = senderIdSelector.getUserId();
+            String userTableName = senderIdSelector.getUserTableName();
+            logBuilder.add("userId", userId).add("userTableName", userTableName);
         }
     }
 
@@ -84,7 +106,6 @@ public class InternalCallService {
         }
         // 系统异常
         if (signatureResult.getCode() == 501) {
-            LogUtils.error(signatureResult.getMsg());
             throw new Exception(signatureResult.getMsg());
         }
     }
@@ -103,15 +124,18 @@ public class InternalCallService {
         // 签名
         String content = "requestId=" + requestId + "&" + "timestamp=" + timestamp;
         String sign = RSAUtils.signByPrivateKey(content, internalCallConfig.getPrivateKey());
+
         // 当前用户信息
-        String userId = senderIdSelector.getUserId();
-        String userTableName = senderIdSelector.getUserTableName();
+        if (senderIdSelector != null) {
+            String userId = senderIdSelector.getUserId();
+            String userTableName = senderIdSelector.getUserTableName();
+            requestBase.addHeader("userId", userId);
+            requestBase.addHeader("userTableName", userTableName);
+        }
 
         requestBase.addHeader("timestamp", String.valueOf(timestamp));
         requestBase.addHeader("requestId", requestId);
         requestBase.addHeader("sign", sign);
-        requestBase.addHeader("userId", userId);
-        requestBase.addHeader("userTableName", userTableName);
         return requestId;
     }
 }

@@ -1,16 +1,20 @@
 package io.github.coffee330501.aspect;
 
 
+import cn.hutool.extra.spring.SpringUtil;
 import io.github.coffee330501.annotation.BusinessExceptionTag;
 import io.github.coffee330501.annotation.Internal;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
+import io.github.coffee330501.service.InternalCallLogHandler;
 import io.github.coffee330501.service.SenderIdHandler;
 import io.github.coffee330501.utils.RSAUtils;
 import io.github.coffee330501.utils.RedisUtil;
 import io.github.coffee330501.utils.SignatureUtil;
+import io.github.coffee330501.utils.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
@@ -19,6 +23,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
@@ -30,8 +35,8 @@ import java.util.Objects;
 public class InternalCallAspect {
     @Resource(name = "interCallRedisUtil")
     RedisUtil redisUtil;
-    @Resource
     SenderIdHandler senderIdHandler;
+    InternalCallLogHandler internalCallLogHandler;
     @Resource
     InternalCallConfig internalCallConfig;
 
@@ -41,6 +46,12 @@ public class InternalCallAspect {
 
     @Pointcut("@annotation(io.github.coffee330501.annotation.Internal)")
     public void internalCallPointCut() {
+    }
+
+    @PostConstruct
+    public void init() {
+        senderIdHandler = SpringContextUtil.getBean(SenderIdHandler.class);
+        internalCallLogHandler = SpringContextUtil.getBean(InternalCallLogHandler.class);
     }
 
     @Around("withinInternalController()")
@@ -66,11 +77,20 @@ public class InternalCallAspect {
             return SignatureUtil.errorByClient("Signature parameter is empty");
         }
 
-        String userId = request.getHeader("userId");
-        String userTableName = request.getHeader("userTableName");
-        senderIdHandler.handle(userId, userTableName);
-
+        // 记录用户ID
+        String userId = null;
+        String userTableName = null;
+        if (senderIdHandler != null) {
+            userId = request.getHeader("userId");
+            userTableName = request.getHeader("userTableName");
+            senderIdHandler.handle(userId, userTableName);
+        }
+        InternalCallLogHandler.LogBuilder logBuilder = InternalCallLogHandler.createLogBuilder();
         try {
+            Object[] args = joinPoint.getArgs();
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            // 记录入参
+            buildLog(logBuilder, requestId, timestampStr, userId, userTableName, request.getRequestURI(), signature.getDeclaringTypeName() + "." + signature.getMethod().getName(), args);
             // 验签
             String publicKey = internalCallConfig.getPublicKey();
             if (StringUtils.isEmpty(publicKey)) log.error("Internal call publicKey is empty!");
@@ -82,16 +102,23 @@ public class InternalCallAspect {
             // 检查请求是否重复、过期
             requestValidate(timestamp, requestId);
             // 调用方法返回结果
-            Object[] args = joinPoint.getArgs();
             Object result = joinPoint.proceed(args);
+            logBuilder.add("result", result);
             return SignatureUtil.success(result);
         } catch (InternalCallException e) {
+            logBuilder.add("exception", e.getMessage());
             if (e.getCode() == 400) return SignatureUtil.errorByClient(e.getMessage());
             return SignatureUtil.errorByBusiness(e.getMessage());
         } catch (Exception e) {
+            logBuilder.add("exception", e.getMessage());
             BusinessExceptionTag annotation = e.getClass().getAnnotation(BusinessExceptionTag.class);
             if (annotation == null) return SignatureUtil.errorBySystem(e.getMessage());
             return SignatureUtil.errorByBusiness(e.getMessage());
+        } finally {
+            // 记录日志
+            if (internalCallLogHandler != null) {
+                internalCallLogHandler.log(logBuilder);
+            }
         }
     }
 
@@ -120,6 +147,19 @@ public class InternalCallAspect {
         boolean set = redisUtil.setNx(requestId, 10);
         if (!set) {
             throw new InternalCallException(400, "Duplicate Request");
+        }
+    }
+
+    private void buildLog(InternalCallLogHandler.LogBuilder logBuilder, String requestId, String timestampStr, String userId, String userTableName, String uri, String methodName, Object[] args) {
+        logBuilder.add("requestId", requestId)
+                .add("timestampStr", timestampStr)
+                .add("uri", uri)
+                .add("methodName", methodName)
+                .add("params", args)
+                .add("type", "receive");
+
+        if (userId != null) {
+            logBuilder.add("userId", userId).add("userTableName", userTableName);
         }
     }
 }
