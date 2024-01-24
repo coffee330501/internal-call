@@ -43,7 +43,7 @@ public class InternalCallService {
         return post(url, clazz, new Object());
     }
 
-    public Object post(String url, Class clazz, Object params) throws IOException, InternalCallException {
+    public Object post(String url, Class clazz, Object params) throws InternalCallException {
         InternalCallLogHandler.LogBuilder logBuilder = InternalCallLogHandler.createLogBuilder();
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);
@@ -78,6 +78,8 @@ public class InternalCallService {
                 return JSONArray.parseArray(JSONObject.toJSONString(data), clazz);
             }
             return JSONObject.parseObject(JSONObject.toJSONString(data), clazz);
+        } catch (IOException e) {
+            throw new InternalCallException(501, e.getMessage());
         } finally {
             if (internalCallLogHandler != null) internalCallLogHandler.log(logBuilder);
         }
@@ -86,7 +88,7 @@ public class InternalCallService {
     private void log(InternalCallLogHandler.LogBuilder logBuilder, String url, Object params, String requestId) {
         logBuilder.add("url", url).add("params", params).add("requestId", requestId).add("type", "send");
         if (informationTransmitter != null) {
-            Map<String,String> information = informationTransmitter.getInformation();
+            Map<String, String> information = informationTransmitter.getInformation();
             logBuilder.add("internalInfo", information);
         }
     }
