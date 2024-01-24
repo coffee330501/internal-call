@@ -1,20 +1,18 @@
 package io.github.coffee330501.aspect;
 
 
-import cn.hutool.extra.spring.SpringUtil;
 import io.github.coffee330501.annotation.BusinessExceptionTag;
 import io.github.coffee330501.annotation.Internal;
 import io.github.coffee330501.config.InternalCallConfig;
 import io.github.coffee330501.exception.InternalCallException;
+import io.github.coffee330501.service.AbstractInformationTransmitter;
 import io.github.coffee330501.service.InternalCallLogHandler;
-import io.github.coffee330501.service.SenderIdHandler;
 import io.github.coffee330501.utils.RSAUtils;
 import io.github.coffee330501.utils.RedisUtil;
 import io.github.coffee330501.utils.SignatureUtil;
 import io.github.coffee330501.utils.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
@@ -28,6 +26,8 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
 
 @Aspect
@@ -35,7 +35,7 @@ import java.util.Objects;
 public class InternalCallAspect {
     @Resource(name = "interCallRedisUtil")
     RedisUtil redisUtil;
-    SenderIdHandler senderIdHandler;
+    AbstractInformationTransmitter informationTransmitter;
     InternalCallLogHandler internalCallLogHandler;
     @Resource
     InternalCallConfig internalCallConfig;
@@ -50,7 +50,7 @@ public class InternalCallAspect {
 
     @PostConstruct
     public void init() {
-        senderIdHandler = SpringContextUtil.getBean(SenderIdHandler.class);
+        informationTransmitter = SpringContextUtil.getBean(AbstractInformationTransmitter.class);
         internalCallLogHandler = SpringContextUtil.getBean(InternalCallLogHandler.class);
     }
 
@@ -80,10 +80,14 @@ public class InternalCallAspect {
         // 记录用户ID
         String userId = null;
         String userTableName = null;
-        if (senderIdHandler != null) {
-            userId = request.getHeader("userId");
-            userTableName = request.getHeader("userTableName");
-            senderIdHandler.handle(userId, userTableName);
+        if (informationTransmitter != null) {
+            List<String> keys = informationTransmitter.declareInformationMapKeys();
+            HashMap<String, String> info = new HashMap<>();
+            for (String k : keys) {
+                String v = request.getHeader(k);
+                info.put(k,v);
+            }
+            informationTransmitter.setInformation(info);
         }
         InternalCallLogHandler.LogBuilder logBuilder = InternalCallLogHandler.createLogBuilder();
         try {
