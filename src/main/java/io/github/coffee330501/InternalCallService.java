@@ -21,6 +21,7 @@ import org.apache.http.util.EntityUtils;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
+import java.io.IOException;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
@@ -42,7 +43,7 @@ public class InternalCallService {
         return post(url, clazz, new Object());
     }
 
-    public Object post(String url, Class clazz, Object params) throws Exception {
+    public Object post(String url, Class clazz, Object params) throws IOException, InternalCallException {
         InternalCallLogHandler.LogBuilder logBuilder = InternalCallLogHandler.createLogBuilder();
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpEntityEnclosingRequestBase requestBase = new HttpPost(url);

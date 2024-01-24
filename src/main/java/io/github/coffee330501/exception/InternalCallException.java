@@ -1,6 +1,6 @@
 package io.github.coffee330501.exception;
 
-public class InternalCallException extends Exception {
+public class InternalCallException extends RuntimeException {
     private String message;
     private Integer code;
 
