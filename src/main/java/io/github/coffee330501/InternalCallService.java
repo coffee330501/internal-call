@@ -39,7 +39,7 @@ public class InternalCallService {
     }
 
 
-    public Object post(String url, Class clazz) throws Exception {
+    public Object post(String url, Class clazz) {
         return post(url, clazz, new Object());
     }
 
